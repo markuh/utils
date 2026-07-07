@@ -5,16 +5,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/doug-martin/goqu/v9"
 	_ "github.com/doug-martin/goqu/v9/dialect/postgres"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/markuh/utils/pkg/apperrors"
+	"github.com/markuh/utils/pkg/db"
 	"github.com/markuh/utils/pkg/helpers"
 )
-
-var postgresDialect = goqu.Dialect("postgres")
 
 type latestRevision struct {
 	revision int
@@ -23,12 +22,12 @@ type latestRevision struct {
 
 func (s *Store[T]) OnSave(ctx context.Context, entity *T) error {
 	if entity == nil {
-		return fmt.Errorf("history: OnSave: nil entity")
+		return apperrors.New("history: OnSave: nil entity")
 	}
 
 	entityID := s.entityID(entity)
 	if entityID <= 0 {
-		return fmt.Errorf("history: OnSave: invalid entity id")
+		return apperrors.New("history: OnSave: invalid entity id")
 	}
 
 	snapshot, err := s.entitySnapshot(entity)
@@ -68,12 +67,12 @@ func (s *Store[T]) OnSave(ctx context.Context, entity *T) error {
 
 func (s *Store[T]) OnDelete(ctx context.Context, entity *T) error {
 	if entity == nil {
-		return fmt.Errorf("history: OnDelete: nil entity")
+		return apperrors.New("history: OnDelete: nil entity")
 	}
 
 	entityID := s.entityID(entity)
 	if entityID <= 0 {
-		return fmt.Errorf("history: OnDelete: invalid entity id")
+		return apperrors.New("history: OnDelete: invalid entity id")
 	}
 
 	snapshot, err := s.entitySnapshot(entity)
@@ -100,15 +99,10 @@ func (s *Store[T]) OnDelete(ctx context.Context, entity *T) error {
 
 func (s *Store[T]) LoadByEntityID(ctx context.Context, entityID int64) ([]*Revision, error) {
 	if entityID <= 0 {
-		return nil, fmt.Errorf("history: LoadByEntityID: invalid entity id")
+		return nil, apperrors.New("history: LoadByEntityID: invalid entity id")
 	}
 
-	tblName, err := tableName(s.table)
-	if err != nil {
-		return nil, err
-	}
-
-	querySQL := postgresDialect.From(tblName).
+	querySQL := db.PgDialect.From(s.table.Name).
 		Select(s.selectFields()...).
 		Where(goqu.Ex{colEntityID: entityID}).
 		Order(goqu.I(colRevision).Desc())
@@ -118,7 +112,7 @@ func (s *Store[T]) LoadByEntityID(ctx context.Context, entityID int64) ([]*Revis
 		return nil, wrapEntity(err, ErrFmtPrepareLoad, s.entityLabel)
 	}
 
-	rows, err := s.db(ctx).QueryContext(ctx, query, args...)
+	rows, err := s.db(ctx).Query(ctx, query, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -149,15 +143,10 @@ func (s *Store[T]) LoadByEntityID(ctx context.Context, entityID int64) ([]*Revis
 
 func (s *Store[T]) GetLatest(ctx context.Context, entityID int64) (*Revision, error) {
 	if entityID <= 0 {
-		return nil, fmt.Errorf("history: GetLatest: invalid entity id")
+		return nil, apperrors.New("history: GetLatest: invalid entity id")
 	}
 
-	tblName, err := tableName(s.table)
-	if err != nil {
-		return nil, err
-	}
-
-	querySQL := postgresDialect.From(tblName).
+	querySQL := db.PgDialect.From(s.table.Name).
 		Select(s.selectFields()...).
 		Where(goqu.Ex{colEntityID: entityID}).
 		Order(goqu.I(colRevision).Desc()).
@@ -168,7 +157,7 @@ func (s *Store[T]) GetLatest(ctx context.Context, entityID int64) (*Revision, er
 		return nil, wrapEntity(err, ErrFmtPrepareLoad, s.entityLabel)
 	}
 
-	row, err := s.readRevisionRow(s.db(ctx).QueryRowContext(ctx, query, args...))
+	row, err := s.readRevisionRow(s.db(ctx).QueryRow(ctx, query, args...))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -181,15 +170,10 @@ func (s *Store[T]) GetLatest(ctx context.Context, entityID int64) (*Revision, er
 
 func (s *Store[T]) GetByID(ctx context.Context, revisionID int64) (*Revision, error) {
 	if revisionID <= 0 {
-		return nil, fmt.Errorf("history: GetByID: invalid revision id")
+		return nil, apperrors.New("history: GetByID: invalid revision id")
 	}
 
-	tblName, err := tableName(s.table)
-	if err != nil {
-		return nil, err
-	}
-
-	querySQL := postgresDialect.From(tblName).
+	querySQL := db.PgDialect.From(s.table.Name).
 		Select(s.selectFields()...).
 		Where(goqu.Ex{colID: revisionID}).
 		Limit(1)
@@ -199,7 +183,7 @@ func (s *Store[T]) GetByID(ctx context.Context, revisionID int64) (*Revision, er
 		return nil, wrapEntity(err, ErrFmtPrepareLoad, s.entityLabel)
 	}
 
-	row, err := s.readRevisionRow(s.db(ctx).QueryRowContext(ctx, query, args...))
+	row, err := s.readRevisionRow(s.db(ctx).QueryRow(ctx, query, args...))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -211,13 +195,8 @@ func (s *Store[T]) GetByID(ctx context.Context, revisionID int64) (*Revision, er
 }
 
 func (s *Store[T]) loadLatestRevision(ctx context.Context, entityID int64) (*latestRevision, error) {
-	tblName, err := tableName(s.table)
-	if err != nil {
-		return nil, err
-	}
-
-	query, args, err := postgresDialect.
-		From(tblName).
+	query, args, err := db.PgDialect.
+		From(s.table.Name).
 		Select(colRevision, colData).
 		Where(goqu.Ex{colEntityID: entityID}).
 		Order(goqu.I(colRevision).Desc()).
@@ -228,7 +207,7 @@ func (s *Store[T]) loadLatestRevision(ctx context.Context, entityID int64) (*lat
 		return nil, wrapEntity(err, ErrFmtPrepareLoad, s.entityLabel)
 	}
 
-	row := s.db(ctx).QueryRowContext(ctx, query, args...)
+	row := s.db(ctx).QueryRow(ctx, query, args...)
 	var rev int
 	var data string
 	if err := row.Scan(&rev, &data); err != nil {
@@ -249,11 +228,6 @@ func (s *Store[T]) insertRevision(
 	packedData string,
 	isDeleted bool,
 ) error {
-	tblName, err := tableName(s.table)
-	if err != nil {
-		return err
-	}
-
 	if diff == nil {
 		diff = map[string]any{}
 	}
@@ -262,8 +236,8 @@ func (s *Store[T]) insertRevision(
 		return wrapEntity(err, ErrFmtPrepareInsert, s.entityLabel)
 	}
 
-	query, args, err := postgresDialect.
-		Insert(tblName).
+	query, args, err := db.PgDialect.
+		Insert(s.table.Name).
 		Rows(goqu.Record{
 			colRevision:  revision,
 			colEntityID:  entityID,
@@ -279,7 +253,7 @@ func (s *Store[T]) insertRevision(
 		return wrapEntity(err, ErrFmtPrepareInsert, s.entityLabel)
 	}
 
-	if _, err := s.db(ctx).ExecContext(ctx, query, args...); err != nil {
+	if _, err := s.db(ctx).Exec(ctx, query, args...); err != nil {
 		return wrapEntity(err, ErrFmtInsert, s.entityLabel)
 	}
 	return nil
@@ -303,7 +277,7 @@ func (s *Store[T]) selectFields() []any {
 
 func (s *Store[T]) entitySnapshot(entity *T) (map[string]any, error) {
 	if entity == nil {
-		return nil, fmt.Errorf("history: nil entity")
+		return nil, apperrors.New("history: nil entity")
 	}
 	return helpers.JSONToMap(entity)
 }

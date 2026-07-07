@@ -2,7 +2,10 @@ package db
 
 import (
 	"context"
-	"database/sql"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PgxScanner interface {
@@ -11,20 +14,16 @@ type PgxScanner interface {
 
 // IQuery interface for make db queires
 type IQuery interface {
-	Exec(sql string, arguments ...any) (sql.Result, error)
-	ExecContext(ctx context.Context, sql string, arguments ...any) (sql.Result, error)
-	Query(sql string, args ...any) (*sql.Rows, error)
-	QueryContext(ctx context.Context, sql string, args ...any) (*sql.Rows, error)
-	QueryRow(sql string, args ...any) *sql.Row
-	QueryRowContext(ctx context.Context, sql string, args ...any) *sql.Row
-	PrepareContext(ctx context.Context, sql string) (*sql.Stmt, error)
+	Exec(ctx context.Context, sql string, arguments ...any) (commandTag pgconn.CommandTag, err error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// TxRepository use for extends repository interfaces
+// TxRepository interface for extends repository interfaces
 type TxRepository interface {
 	WithTx(ctx context.Context, handler func(ctx context.Context) error) error
 	GetDb(ctx context.Context) IQuery
-	GetNative() *sql.DB
+	GetNative() *pgxpool.Pool
 	Lock(ctx context.Context, table, code string) (bool, error)
 	Unlock(ctx context.Context, table, code string) (bool, error)
 }

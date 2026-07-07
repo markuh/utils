@@ -4,7 +4,8 @@ import (
 	"context"
 	"hash/fnv"
 
-	"database/sql"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/markuh/utils/pkg/apperrors"
 )
@@ -16,20 +17,20 @@ const (
 )
 
 // NewTxRepository wraps a repository for transactional execution
-func NewTxRepository(db *sql.DB) TxRepository {
+func NewTxRepository(dbpool *pgxpool.Pool) TxRepository {
 	return &txRepository{
-		db: db,
+		db: dbpool,
 	}
 }
 
 // txRepository
 type txRepository struct {
-	db *sql.DB
+	db *pgxpool.Pool
 }
 
 // getTx return tx and flag of it exists
-func (t *txRepository) getTx(ctx context.Context) (*sql.Tx, bool) {
-	tx, ok := ctx.Value(txCtxKey).(*sql.Tx)
+func (t *txRepository) getTx(ctx context.Context) (pgx.Tx, bool) {
+	tx, ok := ctx.Value(txCtxKey).(pgx.Tx)
 	return tx, ok
 }
 
@@ -41,11 +42,11 @@ func (t *txRepository) WithTx(ctx context.Context, handler func(ctx context.Cont
 
 	if !txExists {
 		// init TX
-		tx, err = t.db.BeginTx(ctx, nil)
+		tx, err = t.db.Begin(ctx)
 		if err != nil {
 			return apperrors.Wrap(err, "can't init transaction")
 		}
-		defer func(ctx context.Context) { _ = tx.Rollback() }(ctx)
+		defer func(ctx context.Context) { _ = tx.Rollback(ctx) }(ctx)
 
 		// set TX to context
 		ctx = context.WithValue(ctx, txCtxKey, tx)
@@ -60,7 +61,7 @@ func (t *txRepository) WithTx(ctx context.Context, handler func(ctx context.Cont
 		ctx = context.WithValue(ctx, txCtxKey, nil)
 
 		// commit TX
-		if err := tx.Commit(); err != nil {
+		if err := tx.Commit(ctx); err != nil {
 			return apperrors.Wrap(err, "can't commit transaction")
 		}
 	}
@@ -70,7 +71,7 @@ func (t *txRepository) WithTx(ctx context.Context, handler func(ctx context.Cont
 
 // GetDb return db connection for in tx queries
 func (t *txRepository) GetDb(ctx context.Context) IQuery {
-	tx, ok := ctx.Value(txCtxKey).(*sql.Tx)
+	tx, ok := ctx.Value(txCtxKey).(pgx.Tx)
 	if !ok {
 		return t.db
 	}
@@ -78,7 +79,7 @@ func (t *txRepository) GetDb(ctx context.Context) IQuery {
 }
 
 // GetNative return native db connection
-func (t *txRepository) GetNative() *sql.DB {
+func (t *txRepository) GetNative() *pgxpool.Pool {
 	return t.db
 }
 
@@ -89,7 +90,7 @@ func (t *txRepository) Lock(ctx context.Context, table, code string) (bool, erro
 	codeHash := getInt16Hash(code)
 
 	query := `SELECT pg_try_advisory_lock($1, $2);`
-	if err := t.GetDb(ctx).QueryRowContext(ctx, query, tableHash, codeHash).Scan(&result); err != nil {
+	if err := t.GetDb(ctx).QueryRow(ctx, query, tableHash, codeHash).Scan(&result); err != nil {
 		return result, apperrors.Wrap(err, "can't get lock")
 	}
 	return result, nil
@@ -102,7 +103,7 @@ func (t *txRepository) Unlock(ctx context.Context, table, code string) (bool, er
 	codeHash := getInt16Hash(code)
 
 	query := `SELECT pg_advisory_unlock($1, $2);`
-	if err := t.GetDb(ctx).QueryRowContext(ctx, query, tableHash, codeHash).Scan(&result); err != nil {
+	if err := t.GetDb(ctx).QueryRow(ctx, query, tableHash, codeHash).Scan(&result); err != nil {
 		return result, apperrors.Wrap(err, "can't unlock")
 	}
 	return result, nil

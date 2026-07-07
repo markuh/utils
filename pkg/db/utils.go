@@ -4,14 +4,12 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/markuh/utils/pkg/apperrors"
 )
 
-type PgxScanner interface {
-	Scan(dest ...any) error
-}
-
-func ScanRows[T any](rows *sql.Rows, scanner func(row PgxScanner) (*T, error)) ([]*T, error) {
+func ScanRows[T any](rows pgx.Rows, scanner func(row PgxScanner) (*T, error)) ([]*T, error) {
 	result := make([]*T, 0)
 	for rows.Next() {
 		item, err := scanner(rows)

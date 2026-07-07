@@ -8,13 +8,13 @@ import (
 )
 
 type Config[T any] struct {
-	Table    db.TableConfig
+	Table    db.TableConfig[T]
 	EntityID func(*T) int64
 }
 
 type Store[T any] struct {
 	entityLabel string
-	table       db.TableConfig
+	table       db.TableConfig[T]
 	entityID    func(*T) int64
 	db          func(context.Context) db.IQuery
 }
@@ -46,11 +46,4 @@ func validateConfig[T any](cfg *Config[T]) error {
 		return fmt.Errorf("history: incomplete Config")
 	}
 	return nil
-}
-
-func tableName(cfg db.TableConfig) (string, error) {
-	if cfg.Name == "" {
-		return "", fmt.Errorf("history: table name is empty")
-	}
-	return cfg.Name, nil
 }
