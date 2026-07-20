@@ -24,6 +24,8 @@ type TxRepository interface {
 	WithTx(ctx context.Context, handler func(ctx context.Context) error) error
 	GetDb(ctx context.Context) IQuery
 	GetNative() *pgxpool.Pool
-	Lock(ctx context.Context, table, code string) (bool, error)
+	Lock(ctx context.Context, table, code string) error
+	TxLock(ctx context.Context, table, code string) error
+	TryLock(ctx context.Context, table, code string) (bool, error)
 	Unlock(ctx context.Context, table, code string) (bool, error)
 }

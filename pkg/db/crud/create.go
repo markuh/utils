@@ -12,6 +12,11 @@ func (r *crudRepository[T, SearchFilter, GetFilter]) Create(ctx context.Context,
 	return r.CreateWithParams(ctx, item, r.table.InsertValues(item), r.postSaveFunc)
 }
 
+// CreateWithValues creates a new item with the given values.
+func (r *crudRepository[T, SearchFilter, GetFilter]) CreateWithValues(ctx context.Context, item *T, vals [][]any) (*T, error) {
+	return r.CreateWithParams(ctx, item, vals, r.postSaveFunc)
+}
+
 // CreateWithParams creates a new item with the given values and post save function.
 func (r *crudRepository[T, SearchFilter, GetFilter]) CreateWithParams(
 	ctx context.Context,
@@ -24,7 +29,7 @@ func (r *crudRepository[T, SearchFilter, GetFilter]) CreateWithParams(
 	if err := r.db.WithTx(ctx, func(ctx context.Context) error {
 		sql, args, err := db.PgDialect.
 			Insert(r.table.Name).
-			Cols(r.table.InsertFields).
+			Cols(r.table.InsertFields...).
 			Vals(vals...).
 			Returning(r.table.SelectFields...).
 			Prepared(true).

@@ -13,7 +13,10 @@ import (
 
 // Search default CRUD method for interface implementation.
 func (r *crudRepository[T, SearchFilter, GetFilter]) Search(ctx context.Context, filter SearchFilter) ([]*T, error) {
-	filters := r.searchFilter(filter)
+	filters := []goqu.Expression{}
+	if r.searchFilter != nil {
+		filters = append(filters, r.searchFilter(filter)...)
+	}
 
 	query, args, err := r.searchQuery().
 		Where(goqu.And(filters...)).
@@ -69,10 +72,12 @@ func (r *crudRepository[T, SearchFilter, GetFilter]) Get(ctx context.Context, fi
 
 	filters := r.getFilter(filter)
 
-	query, args, err := r.getQuery().
-		Where(goqu.And(filters...)).
-		Prepared(true).
-		ToSQL()
+	q := r.getQuery()
+	if filters != nil {
+		q = q.Where(goqu.And(filters...))
+	}
+
+	query, args, err := q.Prepared(true).ToSQL()
 	if err != nil {
 		return nil, apperrors.Wrap(err, "failed to build query")
 	}

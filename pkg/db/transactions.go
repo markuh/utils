@@ -2,12 +2,12 @@ package db
 
 import (
 	"context"
-	"hash/fnv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/markuh/utils/pkg/apperrors"
+	"github.com/markuh/utils/pkg/helpers"
 )
 
 type txKey string
@@ -83,34 +83,53 @@ func (t *txRepository) GetNative() *pgxpool.Pool {
 	return t.db
 }
 
-// Lock logical lock
-func (t *txRepository) Lock(ctx context.Context, table, code string) (bool, error) {
+// TxLock logical lock in transaction
+func (t *txRepository) TxLock(ctx context.Context, table, code string) error {
+	tableHash := helpers.GetInt16Hash(table)
+	codeHash := helpers.GetInt16Hash(code)
+
+	query := `SELECT pg_advisory_xact_lock($1, $2);`
+	if _, err := t.GetDb(ctx).Exec(ctx, query, tableHash, codeHash); err != nil {
+		return apperrors.Wrap(err, "can't get tx lock")
+	}
+
+	return nil
+}
+
+// TryLock non-blocking logical lock
+func (t *txRepository) TryLock(ctx context.Context, table, code string) (bool, error) {
 	var result bool
-	tableHash := getInt16Hash(table)
-	codeHash := getInt16Hash(code)
+	tableHash := helpers.GetInt16Hash(table)
+	codeHash := helpers.GetInt16Hash(code)
 
 	query := `SELECT pg_try_advisory_lock($1, $2);`
 	if err := t.GetDb(ctx).QueryRow(ctx, query, tableHash, codeHash).Scan(&result); err != nil {
-		return result, apperrors.Wrap(err, "can't get lock")
+		return result, apperrors.Wrap(err, "can't try get lock")
 	}
 	return result, nil
+}
+
+// Lock logical lock
+func (t *txRepository) Lock(ctx context.Context, table, code string) error {
+	tableHash := helpers.GetInt16Hash(table)
+	codeHash := helpers.GetInt16Hash(code)
+
+	query := `SELECT pg_advisory_lock($1, $2);`
+	if _, err := t.GetDb(ctx).Exec(ctx, query, tableHash, codeHash); err != nil {
+		return apperrors.Wrap(err, "can't get lock")
+	}
+	return nil
 }
 
 // Unlock free logical lock
 func (t *txRepository) Unlock(ctx context.Context, table, code string) (bool, error) {
 	var result bool
-	tableHash := getInt16Hash(table)
-	codeHash := getInt16Hash(code)
+	tableHash := helpers.GetInt16Hash(table)
+	codeHash := helpers.GetInt16Hash(code)
 
 	query := `SELECT pg_advisory_unlock($1, $2);`
 	if err := t.GetDb(ctx).QueryRow(ctx, query, tableHash, codeHash).Scan(&result); err != nil {
 		return result, apperrors.Wrap(err, "can't unlock")
 	}
 	return result, nil
-}
-
-func getInt16Hash(s string) int16 {
-	h := fnv.New32a()
-	h.Write([]byte(s))
-	return int16(h.Sum32())
 }

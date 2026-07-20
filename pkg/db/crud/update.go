@@ -14,6 +14,11 @@ func (r *crudRepository[T, SearchFilter, GetFilter]) Update(ctx context.Context,
 	return r.UpdateWithParams(ctx, item, r.table.UpdateValues(item), r.updateFilter, r.preUpdateFunc)
 }
 
+// UpdateWithValues updates an item with the given values.
+func (r *crudRepository[T, SearchFilter, GetFilter]) UpdateWithValues(ctx context.Context, item *T, vals *goqu.Record) (*T, error) {
+	return r.UpdateWithParams(ctx, item, vals, r.updateFilter, r.preUpdateFunc)
+}
+
 // UpdateWithParams updates an item with the given values and update filter.
 func (r *crudRepository[T, SearchFilter, GetFilter]) UpdateWithParams(
 	ctx context.Context,

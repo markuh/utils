@@ -8,18 +8,6 @@ import (
 	"github.com/markuh/utils/pkg/db"
 )
 
-type Repository[T any, SearchFilter any, GetFilter any] interface {
-	Search(ctx context.Context, filter SearchFilter) ([]*T, error)
-	SearchWithTotal(ctx context.Context, filter SearchFilter) ([]*T, int64, error)
-	Get(ctx context.Context, filter GetFilter) (*T, error)
-	Create(ctx context.Context, item *T) (*T, error)
-	Update(ctx context.Context, item *T) (*T, error)
-	Delete(ctx context.Context, item *T) error
-	SoftDelete(ctx context.Context, item *T) error
-	CreateWithParams(ctx context.Context, item *T, vals [][]any, postSaveFunc func(ctx context.Context, item *T) error) (*T, error)
-	UpdateWithParams(ctx context.Context, item *T, vals *goqu.Record, updateFilter func(item *T) []goqu.Expression, preUpdateFunc func(ctx context.Context, item *T) error) (*T, error)
-}
-
 type crudRepository[T any, SearchFilter any, GetFilter any] struct {
 	db           db.TxRepository
 	table        db.TableConfig[T]
@@ -29,13 +17,18 @@ type crudRepository[T any, SearchFilter any, GetFilter any] struct {
 	getQuery     func() *goqu.SelectDataset
 	getFilter    func(filter GetFilter) []goqu.Expression
 
+	preSaveFunc  func(ctx context.Context, item *T) (*T, error)
 	postSaveFunc func(ctx context.Context, item *T) error
 
-	updateFilter  func(item *T) []goqu.Expression
-	preUpdateFunc func(ctx context.Context, item *T) error
+	updateFilter   func(item *T) []goqu.Expression
+	preUpdateFunc  func(ctx context.Context, item *T) error
+	postUpdateFunc func(ctx context.Context, item *T) (*T, error)
 
 	softDeleteValues func(item *T) *goqu.Record
 	softDeleteFilter func(item *T) []goqu.Expression
+
+	preDeleteFunc  func(ctx context.Context, item *T) (*T, error)
+	postDeleteFunc func(ctx context.Context, item *T) (*T, error)
 }
 
 func NewCrudRepository[T any, SearchFilter any, GetFilter any](

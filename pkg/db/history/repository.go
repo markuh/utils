@@ -2,9 +2,20 @@ package history
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/markuh/utils/pkg/apperrors"
 	"github.com/markuh/utils/pkg/db"
+)
+
+const (
+	colID        = "id"
+	colRevision  = "revision"
+	colEntityID  = "entity_id"
+	colDiff      = "diff"
+	colData      = "data"
+	colCreatedAt = "created_at"
+	colUpdatedAt = "updated_at"
+	colIsDeleted = "is_deleted"
 )
 
 type Config[T any] struct {
@@ -24,7 +35,7 @@ func NewStore[T any](db func(context.Context) db.IQuery, cfg Config[T]) (*Store[
 		return nil, err
 	}
 	if db == nil {
-		return nil, fmt.Errorf("history: nil db getter")
+		return nil, apperrors.New("history: nil db getter")
 	}
 
 	return &Store[T]{
@@ -37,13 +48,13 @@ func NewStore[T any](db func(context.Context) db.IQuery, cfg Config[T]) (*Store[
 
 func validateConfig[T any](cfg *Config[T]) error {
 	if cfg == nil {
-		return fmt.Errorf("history: nil Config")
+		return apperrors.New("history: nil Config")
 	}
 	if cfg.Table.Name == "" {
-		return fmt.Errorf("history: Config.Table.Name is empty")
+		return apperrors.New("history: Config.Table.Name is empty")
 	}
 	if cfg.EntityID == nil {
-		return fmt.Errorf("history: incomplete Config")
+		return apperrors.New("history: incomplete Config")
 	}
 	return nil
 }

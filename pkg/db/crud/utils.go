@@ -9,6 +9,5 @@ import (
 func (r *crudRepository[T, SearchFilter, GetFilter]) defaultSelectQuery() *goqu.SelectDataset {
 	return db.PgDialect.
 		Select(r.table.SelectFields...).
-		From(r.table.Name).
-		Prepared(true)
+		From(r.table.Name)
 }
